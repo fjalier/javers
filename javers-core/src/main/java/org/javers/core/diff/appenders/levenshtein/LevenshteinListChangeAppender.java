@@ -6,9 +6,7 @@ import org.javers.core.diff.NodePair;
 import org.javers.core.diff.appenders.CorePropertyChangeAppender;
 import org.javers.core.diff.changetype.container.ContainerElementChange;
 import org.javers.core.diff.changetype.container.ListChange;
-import org.javers.core.metamodel.object.GlobalId;
-import org.javers.core.metamodel.object.GlobalIdFactory;
-import org.javers.core.metamodel.object.OwnerContext;
+import org.javers.core.metamodel.object.*;
 import org.javers.core.metamodel.property.Property;
 import org.javers.core.metamodel.type.JaversType;
 import org.javers.core.metamodel.type.ListType;
@@ -51,13 +49,18 @@ public class LevenshteinListChangeAppender extends CorePropertyChangeAppender<Li
         final BacktrackSteps[][] steps = backtrack.evaluateSteps(leftList, rightList);
         final List<ContainerElementChange> changes = stepsToChanges.convert(steps, leftList, rightList);
 
-        return getListChange(pair.getGlobalId(), property, changes);
+        ListChange result = getListChange(pair.getGlobalId(), property, changes);
+        if (result != null) {
+            ListType listType = typeMapper.getPropertyType(property);
+            renderNotParametrizedWarningIfNeeded(listType.getItemType(), "item", "List", property);
+        }
+        return result;
     }
 
     private EqualsFunction createDehydratingEqualsFunction(NodePair pair, Property property){
         ListType listType = typeMapper.getPropertyType(property);
         final JaversType listContentType = typeMapper.getJaversType(listType.getItemType());
-        final OwnerContext owner = new OwnerContext(pair.getGlobalId(), property.getName());
+        final OwnerContext owner = new PropertyOwnerContext(pair.getGlobalId(), property.getName());
         return new EqualsFunction() {
             public boolean nullSafeEquals(Object left, Object right) {
                 Object leftDehydrated = globalIdFactory.dehydrate(left, listContentType, owner);
@@ -78,5 +81,4 @@ public class LevenshteinListChangeAppender extends CorePropertyChangeAppender<Li
         }
         return result;
     }
-
 }

@@ -37,10 +37,25 @@ public class QueryBuilder {
     private LocalDateTime to;
     private boolean newObjectChanges;
     private CommitId commitId;
+    private Long version;
+    private String author;
     private final List<Filter> filters = new ArrayList<>();
 
     private QueryBuilder(Filter initialFilter) {
         addFilter(initialFilter);
+    }
+
+    /**
+     * Query for selecting changes (or snapshots) made on any object.
+     * <br/><br/>
+     *
+     * For example, last changes committed on any object can be fetched with:
+     * <pre>
+     * javers.findChanges( QueryBuilder.anyDomainObject().build() );
+     * </pre>
+     */
+    public static QueryBuilder anyDomainObject(){
+        return new QueryBuilder(new AnyDomainObjectFilter());
     }
 
     /**
@@ -190,7 +205,8 @@ public class QueryBuilder {
      * to those created after (>=) given date.
      * <br/><br/>
      *
-     * <b>Warning!</b> When querying for Changes done
+     * <h2>Important for Changes query</h2>
+     * When querying for Changes done
      * after given point in time, results will lack
      * in <b>first</b> set of changes after that point.
      * <br/>
@@ -210,6 +226,16 @@ public class QueryBuilder {
      * changes done on Friday.
      * That's because Changes Query is backed by Snapshots Query
      * and Changes are calculated as a diff between subsequent Snapshots.
+     *
+     * <h2>CommitDate is local datetime</h2>
+     * Please remember that commitDate is persisted as LocalDateTime
+     * (without information about time zone and daylight saving time).
+     * <br/
+     * It may affects your query results. For example,
+     * once a year when DST ends,
+     * one hour is repeated (clock goes back from 3 am to 2 am).
+     * Looking just on the commitDate we
+     * can't distinct in which <i>iteration</i> of the hour, given commit was made.
      *
      * @see #to(LocalDateTime)
      */
@@ -264,6 +290,31 @@ public class QueryBuilder {
         return withCommitId(CommitId.valueOf(commitId));
     }
 
+    /**
+     * Limits Snapshots to be fetched from JaversRepository
+     * to those with a given version.
+     * <br/><br/>
+     *
+     * <b>Warning!</b> Using withVersion filter when querying
+     * for Changes makes no sense because the result will
+     * always be empty.
+     */
+    public QueryBuilder withVersion(long version) {
+        Validate.argumentCheck(version > 0, "Version is not a positive number.");
+        this.version = version;
+        return this;
+    }
+
+    /**
+     * Limits Snapshots to be fetched from JaversRepository
+     * to those with a given commit author.
+     */
+    public QueryBuilder byAuthor(String author) {
+        Validate.argumentIsNotNull(author);
+        this.author = author;
+        return this;
+    }
+
     protected void addFilter(Filter filter) {
         filters.add(filter);
     }
@@ -278,6 +329,8 @@ public class QueryBuilder {
             .skip(skip)
             .from(from).to(to)
             .commitId(commitId)
+            .version(version)
+            .author(author)
             .build();
     }
 

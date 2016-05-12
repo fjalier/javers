@@ -11,6 +11,7 @@ import org.javers.core.metamodel.object.GlobalId;
 import org.javers.core.metamodel.type.EntityType;
 import org.javers.core.metamodel.type.ManagedType;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -77,6 +78,18 @@ public interface JaversRepository {
      * Optional#EMPTY if object is not versioned
      */
     Optional<CdoSnapshot> getLatest(GlobalId globalId);
+
+    /**
+     * Snapshots of all objects in reverse chronological order
+     *
+     * @param queryParams parameters constraining returned list (size limit, date from/to)
+     */
+    List<CdoSnapshot> getSnapshots(QueryParams queryParams);
+
+    /**
+     * Snapshots with specified globalId and version
+     */
+    List<CdoSnapshot> getSnapshots(Collection<SnapshotIdentifier> snapshotIdentifiers);
 
     void persist(Commit commit);
 

@@ -22,13 +22,17 @@ public class QueryParams {
     private final Optional<LocalDateTime> from;
     private final Optional<LocalDateTime> to;
     private final Optional<CommitId> commitId;
+    private final Optional<Long> version;
+    private final Optional<String> author;
 
-    QueryParams(int limit, int skip, LocalDateTime from, LocalDateTime to, CommitId commitId) {
+    QueryParams(int limit, int skip, LocalDateTime from, LocalDateTime to, CommitId commitId, Long version, String author) {
         this.limit = limit;
         this.skip = skip;
         this.from = Optional.fromNullable(from);
         this.to = Optional.fromNullable(to);
         this.commitId = Optional.fromNullable(commitId);
+        this.version = Optional.fromNullable(version);
+        this.author = Optional.fromNullable(author);
     }
 
     public int limit() {
@@ -75,6 +79,20 @@ public class QueryParams {
         return commitId;
     }
 
+    /*
+     * filters results to Snapshots with a given version
+     */
+    public Optional<Long> version() {
+        return version;
+    }
+
+    /*
+     * filters results to Snapshots committed by a given author
+     */
+    public Optional<String> author() {
+        return author;
+    }
+
     @Override
     public String toString() {
         return "QueryParams{" +
@@ -83,6 +101,7 @@ public class QueryParams {
                 ", from=" + from +
                 ", to=" + to +
                 ", commitId=" + commitId +
+                ", version=" + version +
                 "}";
     }
 }

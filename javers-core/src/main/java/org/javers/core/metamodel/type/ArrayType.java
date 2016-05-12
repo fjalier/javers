@@ -3,6 +3,7 @@ package org.javers.core.metamodel.type;
 import org.javers.common.collections.EnumerableFunction;
 import org.javers.common.collections.Lists;
 import org.javers.common.validation.Validate;
+import org.javers.core.metamodel.object.EnumerationAwareOwnerContext;
 import org.javers.core.metamodel.object.OwnerContext;
 
 import java.lang.reflect.Array;
@@ -20,12 +21,7 @@ public class ArrayType extends ContainerType {
     }
 
     @Override
-    public boolean isFullyParametrized() {
-        return true;
-    }
-
-    @Override
-    public List<Type> getActualTypeArguments() {
+    public List<Type> getConcreteClassTypeArguments() {
         return (List)Lists.immutableListOf( getBaseJavaClass().getComponentType() );
     }
 
@@ -42,13 +38,10 @@ public class ArrayType extends ContainerType {
             targetArray = new Object[len];
         }
 
-        IndexableContext indexableContext = new IndexableContext();
-        owner.setEnumeratorContext(indexableContext);
-
+        EnumerationAwareOwnerContext enumerationContext = new IndexableEnumerationOwnerContext(owner);
         for (int i=0; i<len; i++){
             Object sourceVal = Array.get(sourceArray,i);
-            Array.set(targetArray, i, mapFunction.apply(sourceVal, owner));
-            indexableContext.incIndex();
+            Array.set(targetArray, i, mapFunction.apply(sourceVal, enumerationContext));
         }
         return targetArray;
     }

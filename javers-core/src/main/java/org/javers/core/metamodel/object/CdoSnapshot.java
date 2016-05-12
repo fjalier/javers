@@ -138,10 +138,20 @@ public final class CdoSnapshot extends Cdo {
      * See <a href="http://javers.org/documentation/features/#release-notes">release-notes</a>
      * for v. 1.4.4
      *
-     *
      * @since 1.4.4
      */
     public long getVersion() {
         return version;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder
+            .append("Snapshot{commit:").append(getCommitMetadata().getId()).append(", ")
+            .append("id:").append(getGlobalId()).append(", ")
+            .append("version:").append(getVersion()).append(", ")
+            .append(getState()+"}");
+        return stringBuilder.toString();
     }
 }

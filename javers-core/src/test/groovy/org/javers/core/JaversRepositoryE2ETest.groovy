@@ -4,10 +4,12 @@ import org.javers.common.date.FakeDateProvider
 import org.javers.common.reflection.ConcreteWithActualType
 import org.javers.core.diff.changetype.ValueChange
 import org.javers.core.examples.typeNames.*
-import org.javers.core.metamodel.object.CdoSnapshot
 import org.javers.core.model.*
 import org.javers.core.model.SnapshotEntity.DummyEnum
 import org.javers.core.snapshot.SnapshotsAssert
+import org.javers.repository.api.JaversRepository
+import org.javers.repository.api.SnapshotIdentifier
+import org.javers.repository.inmemory.InMemoryRepository
 import org.javers.repository.jql.QueryBuilder
 import org.joda.time.LocalDate
 import org.joda.time.LocalDateTime
@@ -16,25 +18,25 @@ import spock.lang.Unroll
 
 import static org.javers.core.JaversBuilder.javers
 import static org.javers.repository.jql.InstanceIdDTO.instanceId
+import static org.javers.repository.jql.QueryBuilder.anyDomainObject
 import static org.javers.repository.jql.QueryBuilder.byClass
 import static org.javers.repository.jql.QueryBuilder.byInstanceId
 import static org.javers.repository.jql.UnboundedValueObjectIdDTO.unboundedValueObjectId
 import static org.javers.repository.jql.ValueObjectIdDTO.valueObjectId
-import static org.javers.test.builder.DummyUserBuilder.dummyUser
 
 class JaversRepositoryE2ETest extends Specification {
-    FakeDateProvider fakeDateProvider
-    Javers javers
+    protected FakeDateProvider fakeDateProvider
+    protected JaversRepository repository
+    protected Javers javers
 
     def setup() {
-        JaversBuilder javersBuilder = configureJavers(javers())
-        javers = javersBuilder.build()
+        fakeDateProvider = new FakeDateProvider()
+        repository = prepareJaversRepository()
+        javers = javers().withDateTimeProvider(fakeDateProvider).registerJaversRepository(repository).build()
     }
 
-    JaversBuilder configureJavers(JaversBuilder javersBuilder) {
-        // InMemoryRepository is used by default
-        fakeDateProvider = new FakeDateProvider()
-        javersBuilder.withDateTimeProvider(fakeDateProvider)
+    protected JaversRepository prepareJaversRepository() {
+        return new InMemoryRepository();
     }
 
     def "should support EmbeddedId as Entity Id"(){
@@ -110,6 +112,45 @@ class JaversRepositoryE2ETest extends Specification {
         changes.each {
             assert it.affectedGlobalId == valueObjectId(1,SnapshotEntity,"valueObjectRef")
         }
+    }
+
+    def "should query for nested ValueObject changes"(){
+      given:
+      def user = new DummyUserDetails(id:1, dummyAddress:
+              new DummyAddress(networkAddress: new DummyNetworkAddress(address: "a")))
+
+      javers.commit("author", user)
+      user.dummyAddress.networkAddress.address = "b"
+      javers.commit("author", user)
+
+      when:
+      def changes = javers.findChanges(QueryBuilder.byValueObjectId(1, DummyUserDetails,
+              "dummyAddress/networkAddress").build())
+
+      then:
+      changes.size() == 1
+      changes[0].left == "a"
+      changes[0].right == "b"
+    }
+
+    def "should query for changes on nested ValueObjects stored in a list"(){
+        given:
+        def user = new DummyUserDetails(
+            id:1,
+            addressList: [new DummyAddress(networkAddress: new DummyNetworkAddress(address: "a"))])
+
+        javers.commit("author", user)
+        user.addressList[0].networkAddress.address = "b"
+        javers.commit("author", user)
+
+        when:
+        def changes = javers.findChanges(QueryBuilder.byValueObjectId(1, DummyUserDetails,
+                "addressList/0/networkAddress").build())
+
+        then:
+        changes.size() == 1
+        changes[0].left == "a"
+        changes[0].right == "b"
     }
 
     @Unroll
@@ -389,7 +430,7 @@ class JaversRepositoryE2ETest extends Specification {
 
     def "should compare Entity properties with latest from repository"() {
         given:
-        def user = dummyUser("John").withAge(18).build()
+        def user = new DummyUser(name:"John",age:18)
         javers.commit("login", user)
 
         when:
@@ -554,18 +595,18 @@ class JaversRepositoryE2ETest extends Specification {
         snapshot.globalId.typeName.endsWith("OldValueObject")
     }
 
-    def "should use dateProvider.now() as a commitDate"() {
+    def '''should use dateProvider.now() as a commitDate and
+           should serialize and deserialize commitDate as local datetime'''() {
         given:
-        LocalDateTime now = LocalDateTime.parse('2016-01-01T12:12')
+        def now = LocalDateTime.parse('2016-01-01T12:12')
+        fakeDateProvider.set(now)
 
         when:
-        fakeDateProvider.set(now)
         javers.commit("author", new SnapshotEntity(id: 1))
-        CdoSnapshot snapshot = javers.getLatestSnapshot(1, SnapshotEntity).get()
-        LocalDateTime commitDate = snapshot.commitMetadata.commitDate
+        def snapshot = javers.getLatestSnapshot(1, SnapshotEntity).get()
 
         then:
-        now == commitDate
+        snapshot.commitMetadata.commitDate == now
     }
 
     @Unroll
@@ -671,6 +712,96 @@ class JaversRepositoryE2ETest extends Specification {
             { commitId -> byClass(SnapshotEntity).withCommitId(commitId.valueAsNumber()).build() },
             { commitId -> byInstanceId(1, SnapshotEntity).withCommitId(commitId.valueAsNumber()).build() }
         ]
+    }
+
+    @Unroll
+    def "should query for Entity snapshot with given version"() {
+        given:
+        (1..10).each { javers.commit("author", new SnapshotEntity(id: 1, intProperty: it)) }
+
+        when:
+        def snapshots = javers.findSnapshots(query)
+
+        then:
+        snapshots.size() == 1
+        snapshots[0].getPropertyValue('intProperty') == 5
+
+        where:
+        query << [
+            byClass(SnapshotEntity).withVersion(5).build(),
+            byInstanceId(1, SnapshotEntity).withVersion(5).build()
+        ]
+    }
+
+    def "should retrieve snapshots with specified identifiers"() {
+        given:
+        (1..10).each {
+            javers.commit("author", new SnapshotEntity(id: 1, intProperty: it))
+            javers.commit("author", new SnapshotEntity(id: 2, intProperty: it))
+            javers.commit("author", new SnapshotEntity(id: 3, intProperty: it))
+        }
+
+        def snapshotIdentifiers = [
+            new SnapshotIdentifier(javers.idBuilder().instanceId(new SnapshotEntity(id: 1)), 3),
+            new SnapshotIdentifier(javers.idBuilder().instanceId(new SnapshotEntity(id: 3)), 7),
+            new SnapshotIdentifier(javers.idBuilder().instanceId(new SnapshotEntity(id: 2)), 1),
+            new SnapshotIdentifier(javers.idBuilder().instanceId(new SnapshotEntity(id: 1)), 10)
+        ]
+
+        when:
+        def snapshots = repository.getSnapshots(snapshotIdentifiers)
+
+        then:
+        assert snapshots.size() == snapshotIdentifiers.size()
+        snapshotIdentifiers.each { desc ->
+            assert snapshots.find( { snap -> snap.globalId == desc.globalId && snap.version == desc.version } )
+        }
+    }
+
+    def "should cope with query for 1000 different snapshots"() {
+        given:
+        (1..1000).each {
+            javers.commit("author", new SnapshotEntity(id: 1, intProperty: it))
+        }
+
+        def snapshotIdentifiers = (1..1000).collect {
+            new SnapshotIdentifier(javers.idBuilder().instanceId(new SnapshotEntity(id: 1)), it)
+        }
+
+        when:
+        def snapshots = repository.getSnapshots(snapshotIdentifiers)
+
+        then:
+        assert snapshots.size() == snapshotIdentifiers.size()
+    }
+
+    @Unroll
+    def "should query for #what snapshot committed by a given author"() {
+        given:
+        (1..4).each {
+            def author = it % 2 == 0 ? "Jim" : "Pam";
+            javers.commit(author, new SnapshotEntity(id: it))
+            javers.commit(author, new DummyUserDetails(id: it))
+        }
+
+        when:
+        def snapshots = javers.findSnapshots(query)
+
+        then:
+        snapshots*.globalId == expectedResult
+
+        where:
+        what << ["Entity", "any"]
+        query << [
+            byClass(SnapshotEntity).byAuthor("Jim").build(),
+            anyDomainObject().byAuthor("Jim").build()
+        ]
+        expectedResult << [
+            [instanceId(4, SnapshotEntity), instanceId(2, SnapshotEntity)],
+            [instanceId(4, DummyUserDetails), instanceId(4, SnapshotEntity),
+             instanceId(2, DummyUserDetails), instanceId(2, SnapshotEntity)]
+        ]
+
     }
 
 }

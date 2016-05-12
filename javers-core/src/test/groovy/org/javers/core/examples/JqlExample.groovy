@@ -2,6 +2,7 @@ package org.javers.core.examples
 
 import org.javers.common.date.FakeDateProvider
 import org.javers.core.JaversBuilder
+import org.javers.core.commit.CommitId
 import org.javers.core.diff.changetype.NewObject
 import org.javers.core.examples.model.Address
 import org.javers.core.examples.model.Employee
@@ -191,6 +192,50 @@ class JqlExample extends Specification {
       changes.each {
           println "commitDate: "+ it.commitMetadata.get().commitDate+" "+it
       }
+    }
+
+    def "should query for snapshots with commitId filter"(){
+        given:
+        def javers = JaversBuilder.javers().build()
+
+        (1..3).each {
+            javers.commit("author", new Employee(name: "john",age: 20+it))
+            javers.commit("author", new Employee(name: "bob", age: 20+it, salary: 900 + it*100))
+        }
+
+        when:
+        def snapshots = javers
+            .findSnapshots( QueryBuilder.byInstanceId("bob", Employee.class)
+            .withCommitId(CommitId.valueOf(4)).build() )
+
+        then:
+        assert snapshots.size() == 1
+        assert snapshots[0].getPropertyValue("age") == 22
+
+        println "found snapshot:"
+        println snapshots[0]
+    }
+
+    def "should query for snapshots with version filter"(){
+        given:
+        def javers = JaversBuilder.javers().build()
+
+        (1..5).each {
+            javers.commit("author", new Employee(name: "john",age: 20+it))
+            javers.commit("author", new Employee(name: "bob", age: 20+it, salary: 900 + it*100))
+        }
+
+        when:
+        def snapshots = javers
+                .findSnapshots( QueryBuilder.byInstanceId("bob", Employee.class)
+                .withVersion(4).build() )
+
+        then:
+        assert snapshots.size() == 1
+        assert snapshots[0].getPropertyValue("age") == 24
+
+        println "found snapshot:"
+        println snapshots[0]
     }
 
     def "should query for changes with NewObject filter"() {

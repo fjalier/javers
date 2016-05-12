@@ -7,21 +7,17 @@ import org.javers.core.graph.LiveGraph
 import org.javers.core.graph.LiveGraphFactory
 import org.javers.core.json.JsonConverter
 import org.javers.core.json.JsonConverterBuilder
-import org.javers.core.metamodel.annotation.ClassAnnotationsScanner
 import org.javers.core.metamodel.object.CdoWrapper
 import org.javers.core.metamodel.object.GlobalIdFactory
 import org.javers.core.metamodel.object.InstanceId
-import org.javers.core.metamodel.object.SnapshotFactory
+import org.javers.core.model.DummyAddress
+import org.javers.core.snapshot.ObjectHasher
+import org.javers.core.snapshot.SnapshotFactory
 import org.javers.core.metamodel.property.Property
-import org.javers.core.metamodel.property.PropertyScanner
-import org.javers.core.metamodel.type.TypeFactory
 import org.javers.core.metamodel.type.TypeMapper
-import org.javers.core.snapshot.GraphSnapshotFacade
 import org.javers.repository.api.JaversExtendedRepository
 import org.javers.repository.api.JaversRepository
 import org.javers.repository.jql.QueryRunner
-
-import java.lang.reflect.Type
 
 /**
  * This is just a test builder,
@@ -103,24 +99,8 @@ class JaversTestBuilder {
         getTypeMapper().getJaversManagedType(type).getProperty(propName)
     }
 
-    PropertyScanner getPropertyScanner(){
-        javersBuilder.getContainerComponent(PropertyScanner)
-    }
-
-    ClassAnnotationsScanner getClassAnnotationsScanner(){
-        javersBuilder.getContainerComponent(ClassAnnotationsScanner)
-    }
-
     SnapshotFactory getSnapshotFactory() {
         javersBuilder.getContainerComponent(SnapshotFactory)
-    }
-
-    GraphSnapshotFacade getGraphSnapshotFacade() {
-        javersBuilder.getContainerComponent(GraphSnapshotFacade)
-    }
-
-    TypeFactory getTypeSpawningFactory() {
-        javersBuilder.getContainerComponent(TypeFactory)
     }
 
     JaversExtendedRepository getJaversRepository(){
@@ -157,6 +137,14 @@ class JaversTestBuilder {
 
     JsonConverterBuilder getJsonConverterBuilder() {
         javersBuilder.getContainerComponent(JsonConverterBuilder)
+    }
+
+    ObjectHasher getObjectHasher(){
+        javersBuilder.getContainerComponent(ObjectHasher)
+    }
+
+    String addressHash(String city){
+        getObjectHasher().hash(new DummyAddress(city))
     }
 
     def getContainerComponent(Class type) {

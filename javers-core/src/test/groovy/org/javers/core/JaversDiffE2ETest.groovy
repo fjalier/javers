@@ -8,24 +8,17 @@ import org.javers.core.diff.changetype.ReferenceChange
 import org.javers.core.examples.model.Person
 import org.javers.core.json.DummyPointJsonTypeAdapter
 import org.javers.core.json.DummyPointNativeTypeAdapter
+import org.javers.core.metamodel.annotation.Id
 import org.javers.core.metamodel.property.Property
-import org.javers.core.model.Category
-import org.javers.core.model.DummyEntityWithEmbeddedId
-import org.javers.core.model.DummyPoint
-import org.javers.core.model.DummyUser
-
-import org.javers.core.model.DummyUserDetails
-import org.javers.core.model.ShallowPhone
-import org.javers.core.model.PrimitiveEntity
-import org.javers.core.model.SnapshotEntity
+import org.javers.core.model.*
 import spock.lang.Specification
 
 import static org.javers.core.JaversBuilder.javers
 import static org.javers.core.model.DummyUser.Sex.FEMALE
 import static org.javers.core.model.DummyUser.Sex.MALE
+import static org.javers.core.model.DummyUser.dummyUser
 import static org.javers.core.model.DummyUserWithPoint.userWithPoint
 import static org.javers.repository.jql.InstanceIdDTO.instanceId
-import static org.javers.test.builder.DummyUserBuilder.dummyUser
 
 /**
  * @author bartosz walacik
@@ -63,7 +56,7 @@ class JaversDiffE2ETest extends Specification {
     def "should create NewObject for all nodes in initial diff"() {
         given:
         def javers = JaversTestBuilder.newInstance()
-        DummyUser left = dummyUser("kazik").withDetails().build()
+        DummyUser left = dummyUser().withDetails()
 
         when:
         def diff = javers.initial(left)
@@ -105,8 +98,8 @@ class JaversDiffE2ETest extends Specification {
 
     def "should create valueChange with Enum" () {
         given:
-        def user =  dummyUser("id").withSex(FEMALE).build();
-        def user2 = dummyUser("id").withSex(MALE).build();
+        def user =  dummyUser().withSex(FEMALE)
+        def user2 = dummyUser().withSex(MALE)
         def javers = JaversTestBuilder.newInstance()
 
         when:
@@ -121,14 +114,13 @@ class JaversDiffE2ETest extends Specification {
 
     def "should serialize whole Diff"() {
         given:
-        def user =  dummyUser("id").withSex(FEMALE).build();
-        def user2 = dummyUser("id").withSex(MALE).withDetails(1).build();
+        def user =  dummyUser().withSex(FEMALE)
+        def user2 = dummyUser().withSex(MALE).withDetails()
         def javers = JaversTestBuilder.newInstance()
 
         when:
         def diff = javers.compare(user, user2)
         def jsonText = javers.getJsonConverter().toJson(diff)
-        //println("jsonText:\n"+jsonText)
 
         then:
         def json = new JsonSlurper().parseText(jsonText)
@@ -196,7 +188,6 @@ class JaversDiffE2ETest extends Specification {
         DiffAssert.assertThat(diff).hasChanges(0)
     }
 
-
     def "should serialize the Diff object"() {
         given:
         def javers = javers().build()
@@ -250,5 +241,47 @@ class JaversDiffE2ETest extends Specification {
 
         expect:
         javers.compare(left, right).hasChanges() == false
+    }
+
+    def "should ignore properties with @DiffIgnore or @Transient"(){
+        given:
+        def javers = javers().build()
+        def left =  new DummyUser(name:'name', propertyWithTransientAnn:1, propertyWithDiffIgnoreAnn:1)
+        def right = new DummyUser(name:'name', propertyWithTransientAnn:2, propertyWithDiffIgnoreAnn:2)
+
+        expect:
+        javers.compare(left, right).changes.size() == 0
+    }
+
+    class SetValueObject {
+        String some
+        SnapshotEntity ref
+    }
+
+    class ValueObjectHolder {
+        @Id int id
+        Set<SetValueObject> valueObjects
+    }
+
+    def "should follow and deeply compare entities referenced from ValueObjects inside Set"(){
+      given:
+      def javers = javers().build()
+      def left = new ValueObjectHolder(id:1, valueObjects:
+                [new SetValueObject(some:'a'),
+                 new SetValueObject(some:'b', ref: new SnapshotEntity(id:1, intProperty:5))
+                ])
+      def right= new ValueObjectHolder(id:1, valueObjects:
+                [new SetValueObject(some:'b', ref: new SnapshotEntity(id:1, intProperty:6)),
+                 new SetValueObject(some:'a')
+                ])
+
+      when:
+      def changes = javers.compare(left, right).changes
+
+      then:
+      changes.size() == 1
+      changes[0].affectedGlobalId.value() == SnapshotEntity.getName()+"/1"
+      changes[0].left == 5
+      changes[0].right == 6
     }
 }

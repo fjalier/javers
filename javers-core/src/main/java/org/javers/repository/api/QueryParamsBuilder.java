@@ -13,6 +13,8 @@ public class QueryParamsBuilder {
     private LocalDateTime from;
     private LocalDateTime to;
     private CommitId commitId;
+    private Long version;
+    private String author;
 
     private QueryParamsBuilder(int limit) {
         this.limit = limit;
@@ -43,6 +45,9 @@ public class QueryParamsBuilder {
         }
         if (queryParams.commitId().isPresent()) {
             builder = builder.commitId(queryParams.commitId().get());
+        }
+        if (queryParams.version().isPresent()) {
+            builder = builder.version(queryParams.version().get());
         }
         return builder;
     }
@@ -89,11 +94,27 @@ public class QueryParamsBuilder {
         return this;
     }
 
+    /*
+     * limits results to Snapshots with a given version
+     */
+    public QueryParamsBuilder version(Long version) {
+        this.version = version;
+        return this;
+    }
+
+    /*
+     * limits results to Snapshots committed by a given author
+     */
+    public QueryParamsBuilder author(String author) {
+        this.author = author;
+        return this;
+    }
+
     private static void checkLimit(int limit) {
         Validate.argumentCheck(limit > 0, "Limit is not a positive number.");
     }
 
     public QueryParams build() {
-        return new QueryParams(limit, skip, from, to, commitId);
+        return new QueryParams(limit, skip, from, to, commitId, version, author);
     }
 }

@@ -1,17 +1,22 @@
- package org.javers.common.reflection
+package org.javers.common.reflection
+
 import com.google.common.reflect.TypeToken
-import org.javers.core.model.DummyUser
+import org.javers.core.metamodel.annotation.DiffIgnore
+import org.javers.core.model.DummyIgnoredType
+import org.javers.core.model.IgnoredSubType
 import spock.lang.Specification
 import spock.lang.Unroll
 
-import static org.javers.common.reflection.ReflectionTestHelper.getFieldFromClass
 /**
  * @author Pawel Cierpiatka
  */
 class ReflectionUtilTest extends Specification {
-    class ReflectionTestModel {
-        List<DummyUser> dummyUserList
-        Set noGenericSet
+
+    def "should detect annotations in a given class and it superclass"(){
+        expect:
+        ReflectionUtil.isAnnotationPresentInHierarchy(DummyIgnoredType, DiffIgnore)
+        ReflectionUtil.isAnnotationPresentInHierarchy(IgnoredSubType, DiffIgnore)
+        !ReflectionUtil.isAnnotationPresentInHierarchy(ArrayList, DiffIgnore)
     }
 
     def "should instantiate via public constructor with ArgumentsResolver"() {
@@ -54,24 +59,13 @@ class ReflectionUtilTest extends Specification {
 
     }
 
-    def "should return actual type argument from field"() {
-        given:
-        def dummyUsersList = getFieldFromClass(ReflectionTestModel.class, "dummyUserList")
-
-        when:
-        def args = ReflectionUtil.extractActualClassTypeArguments(dummyUsersList.genericType)
-
-        then:
-        args[0] == DummyUser
-    }
-
     @Unroll
     def "should replace formal type parameter with actual type argument for inherited #memberType"() {
         when:
         def member = action.call()
 
         then:
-        member.genericType == new TypeToken<List<String>>(){}.type
+        member.genericResolvedType == new TypeToken<List<String>>(){}.type
 
         println member
 
@@ -79,16 +73,5 @@ class ReflectionUtilTest extends Specification {
         memberType | action
         "Method"   | { ReflectionUtil.getAllMethods(ConcreteWithActualType).find{it.name() == "getValue"} }
         "Field"    | { ReflectionUtil.getAllFields(ConcreteWithActualType).find{it.name() == "value"} }
-    }
-
-    def "should return empty list when type is not generic"() {
-        given:
-        def noGenericSet = getFieldFromClass(ReflectionTestModel.class, "noGenericSet")
-
-        when:
-        def args = ReflectionUtil.extractActualClassTypeArguments(noGenericSet.genericType)
-
-        then:
-        args == []
     }
 }

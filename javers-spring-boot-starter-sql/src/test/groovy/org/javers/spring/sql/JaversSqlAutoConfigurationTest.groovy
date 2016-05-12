@@ -1,5 +1,8 @@
 package org.javers.spring.sql
 
+import org.javers.repository.sql.DialectName
+import org.javers.spring.auditable.AuthorProvider
+import org.javers.spring.auditable.SpringSecurityAuthorProvider
 import org.javers.spring.boot.sql.JaversProperties
 import org.javers.spring.boot.sql.TestApplication
 import org.junit.Test
@@ -20,7 +23,13 @@ import static org.fest.assertions.api.Assertions.assertThat
 public class JaversSqlAutoConfigurationTest {
 
     @Autowired
+    DialectName dialectName;
+
+    @Autowired
     JaversProperties javersProperties;
+
+    @Autowired
+    AuthorProvider provider
 
     @Test
     void shouldReadConfigurationFromYml() {
@@ -29,6 +38,11 @@ public class JaversSqlAutoConfigurationTest {
         assertThat(javersProperties.isNewObjectSnapshot()).isFalse()
         assertThat(javersProperties.isPrettyPrint()).isFalse()
         assertThat(javersProperties.isTypeSafeValues()).isTrue()
-        assertThat(javersProperties.getDialect()).isEqualTo("postgres")
+        assertThat(dialectName).isEqualTo(DialectName.H2)
+    }
+
+    @Test
+    void shouldHaveSpringSecurityAuthorProviderWhenSpringSecurityOnClasspath() {
+        assert provider instanceof SpringSecurityAuthorProvider
     }
 }

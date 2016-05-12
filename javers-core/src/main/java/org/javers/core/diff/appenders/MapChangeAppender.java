@@ -8,8 +8,12 @@ import org.javers.core.diff.changetype.map.*;
 import org.javers.core.metamodel.object.DehydrateMapFunction;
 import org.javers.core.metamodel.object.GlobalIdFactory;
 import org.javers.core.metamodel.object.OwnerContext;
+import org.javers.core.metamodel.object.PropertyOwnerContext;
 import org.javers.core.metamodel.property.Property;
 import org.javers.core.metamodel.type.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.*;
 import static org.javers.common.exception.JaversExceptionCode.VALUE_OBJECT_IS_NOT_SUPPORTED_AS_MAP_KEY;
 
@@ -17,6 +21,8 @@ import static org.javers.common.exception.JaversExceptionCode.VALUE_OBJECT_IS_NO
  * @author bartosz walacik
  */
 class MapChangeAppender extends CorePropertyChangeAppender<MapChange> {
+    private static final Logger logger = LoggerFactory.getLogger(MapChangeAppender.class);
+
     private final TypeMapper typeMapper;
     private final GlobalIdFactory globalIdFactory;
 
@@ -34,9 +40,9 @@ class MapChangeAppender extends CorePropertyChangeAppender<MapChange> {
 
         MapContentType mapContentType = typeMapper.getMapContentType((MapType)propertyType);
         if (mapContentType.getKeyType() instanceof ValueObjectType){
-            throw new JaversException(VALUE_OBJECT_IS_NOT_SUPPORTED_AS_MAP_KEY,
-                                      propertyType);
+            throw new JaversException(VALUE_OBJECT_IS_NOT_SUPPORTED_AS_MAP_KEY, propertyType);
         }
+
         return true;
     }
 
@@ -48,10 +54,12 @@ class MapChangeAppender extends CorePropertyChangeAppender<MapChange> {
         MapType mapType = typeMapper.getPropertyType(property);
         MapContentType mapContentType = typeMapper.getMapContentType(mapType);
 
-        OwnerContext owner = new OwnerContext(pair.getGlobalId(), property.getName());
+        OwnerContext owner = new PropertyOwnerContext(pair.getGlobalId(), property.getName());
         List<EntryChange> changes = calculateEntryChanges(leftRawMap, rightRawMap, owner, mapContentType);
 
         if (!changes.isEmpty()){
+            renderNotParametrizedWarningIfNeeded(mapContentType.getKeyType().getBaseJavaType(), "key", "Map", property);
+            renderNotParametrizedWarningIfNeeded(mapContentType.getValueType().getBaseJavaType(), "value", "Map", property);
             return new MapChange(pair.getGlobalId(), property.getName(), changes);
         }
         else {
@@ -96,5 +104,4 @@ class MapChangeAppender extends CorePropertyChangeAppender<MapChange> {
 
         return changes;
     }
-
 }
